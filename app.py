@@ -22,7 +22,7 @@ ensure_weights()
 # Page config — must be first Streamlit call
 
 st.set_page_config(
-    page_title="Surgical Video Enhancement",
+    page_title="Laparoscopic Desmoking v0.1",
     page_icon="🔬",
     layout="wide",
     initial_sidebar_state="expanded",
@@ -187,8 +187,8 @@ with st.sidebar:
 # Header
 
 
-st.markdown("# 🔬 SURGICAL VIDEO ENHANCEMENT")
-st.markdown("## LAPAROSCOPIC SMOKE DETECTION & REMOVAL PIPELINE")
+st.markdown("# 🔬 LAPAROSCOPIC DESMOKING PIPELINE")
+st.markdown("## SURGICAL SMOKE DETECTION & REMOVAL · v0.1")
 st.markdown("---")
 
 
