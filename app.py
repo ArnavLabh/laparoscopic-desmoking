@@ -10,6 +10,8 @@ import os
 import json
 import torch
 from PIL import Image
+import requests
+import re
 
 from pipeline.detection.smoke_classifier import load_classifier, predict_frame
 from pipeline.enhancement.desmoke import load_generator, desmoke_frame
@@ -135,6 +137,32 @@ def load_models():
     return classifier, generator, device
 
 
+def resolve_video_url(url: str) -> str:
+    """
+    Converts a Google Drive share link to a direct download URL.
+    Passes through direct video URLs unchanged.
+    """
+    # Google Drive share link pattern
+    gdrive_match = re.search(r"drive\.google\.com/file/d/([a-zA-Z0-9_-]+)", url)
+    if gdrive_match:
+        file_id = gdrive_match.group(1)
+        return f"https://drive.google.com/uc?export=download&id={file_id}"
+    return url  # assume direct URL otherwise
+
+
+def download_video_from_url(url: str) -> str:
+    """
+    Downloads video from URL to a temp file.
+    Returns path to temp file.
+    """
+    resolved = resolve_video_url(url)
+    tmp = tempfile.NamedTemporaryFile(delete=False, suffix=".mp4")
+    with requests.get(resolved, stream=True, timeout=30) as r:
+        r.raise_for_status()
+        for chunk in r.iter_content(chunk_size=8192):
+            tmp.write(chunk)
+    tmp.flush()
+    return tmp.name
 
 # Sidebar
 
@@ -194,14 +222,42 @@ st.markdown("---")
 
 # Upload
 
+tab1, tab2 = st.tabs(["📁  UPLOAD FILE", "🔗  PASTE URL"])
 
-uploaded = st.file_uploader(
-    "Upload laparoscopic video",
-    type=["mp4", "avi", "mov"],
-    help="Short clips recommended for demo (< 500 frames)"
-)
+tfile_path = None
 
-if uploaded is None:
+with tab1:
+    uploaded = st.file_uploader(
+        "Upload laparoscopic video (max 200MB)",
+        type=["mp4", "avi", "mov"],
+        help="For larger files use the URL tab"
+    )
+    if uploaded is not None:
+        tfile = tempfile.NamedTemporaryFile(delete=False, suffix=".mp4")
+        tfile.write(uploaded.read())
+        tfile.flush()
+        tfile_path = tfile_path
+
+with tab2:
+    st.markdown("""
+    <div style='font-family:monospace; font-size:0.75rem; color:#5a8a9f; margin-bottom:8px'>
+    ACCEPTED SOURCES: Google Drive share link · Direct video file URL (Dropbox etc.)
+    </div>
+    """, unsafe_allow_html=True)
+    video_url = st.text_input(
+        "Paste video URL",
+        placeholder="https://drive.google.com/file/d/... or https://dl.dropbox.com/..."
+    )
+    if video_url:
+        with st.spinner("Fetching video..."):
+            try:
+                tfile_path = download_video_from_url(video_url)
+                st.success("Video fetched successfully.")
+            except Exception as e:
+                st.error(f"Could not fetch video: {e}")
+                tfile_path = None
+
+if tfile_path is None:
     st.markdown("""
     <div style='text-align:center; padding:60px; color:#2a4a5a;
                 border:1px dashed #1e2733; border-radius:8px; margin-top:20px;'>
@@ -221,7 +277,7 @@ tfile = tempfile.NamedTemporaryFile(delete=False, suffix=".mp4")
 tfile.write(uploaded.read())
 tfile.flush()
 
-cap = cv2.VideoCapture(tfile.name)
+cap = cv2.VideoCapture(tfile_path)
 total_frames = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
 fps          = cap.get(cv2.CAP_PROP_FPS) or 25
 cap.release()
@@ -230,8 +286,35 @@ frames_to_process = total_frames if max_frames == 0 else min(max_frames, total_f
 
 col1, col2, col3 = st.columns(3)
 col1.metric("TOTAL FRAMES", total_frames)
-col2.metric("FRAMES TO PROCESS", frames_to_process)
-col3.metric("FPS", f"{fps:.1f}")
+col2.metric("FPS", f"{fps:.1f}")
+col3.metric("DURATION", f"{total_frames/fps:.1f}s")
+
+st.markdown("---")
+st.markdown("### FRAME RANGE")
+
+range_col1, range_col2 = st.columns(2)
+with range_col1:
+    start_frame = st.number_input(
+        "Start Frame", min_value=0,
+        max_value=total_frames - 1, value=0, step=1
+    )
+with range_col2:
+    end_frame = st.number_input(
+        "End Frame", min_value=1,
+        max_value=total_frames,
+        value=min(300, total_frames), step=1
+    )
+
+if end_frame <= start_frame:
+    st.error("End frame must be greater than start frame.")
+    st.stop()
+
+frames_to_process = end_frame - start_frame
+
+r1, r2, r3 = st.columns(3)
+r1.metric("START FRAME", start_frame)
+r2.metric("END FRAME",   end_frame)
+r3.metric("FRAMES TO PROCESS", frames_to_process)
 
 st.markdown("---")
 
@@ -290,7 +373,8 @@ st.markdown("### FRAME LOG")
 log_container = st.empty()
 
 # Processing state
-cap = cv2.VideoCapture(tfile.name)
+cap = cv2.VideoCapture(tfile_path)
+cap.set(cv2.CAP_PROP_POS_FRAMES, start_frame)
 
 processed_frames = []
 metrics_log      = []
@@ -303,7 +387,7 @@ w = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
 h = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
 writer = cv2.VideoWriter(output_tmp.name, fourcc, fps, (w, h))
 
-for idx in range(frames_to_process):
+for idx in range(start_frame, end_frame):
     ret, frame = cap.read()
     if not ret:
         break
@@ -444,7 +528,7 @@ PIPELINE v0.1 · SMOKE CLASSIFIER MobileNetV2 · ENHANCEMENT CycleGAN LITE
 
 # Cleanup temp files
 try:
-    os.unlink(tfile.name)
+    os.unlink(tfile_path)
     os.unlink(output_tmp.name)
 except Exception:
     pass
