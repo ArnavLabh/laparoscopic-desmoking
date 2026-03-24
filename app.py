@@ -233,9 +233,6 @@ with tab1:
         help="For larger files use the URL tab"
     )
     if uploaded is not None:
-        tfile = tempfile.NamedTemporaryFile(delete=False, suffix=".mp4")
-        tfile.write(uploaded.read())
-        tfile.flush()
         tfile_path = tfile_path
 
 with tab2:
