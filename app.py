@@ -277,6 +277,10 @@ total_frames = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
 fps          = cap.get(cv2.CAP_PROP_FPS) or 25
 cap.release()
 
+if total_frames < 2:
+    st.error("Could not read video file. If using a URL, check the link is a direct download and not a preview page.")
+    st.stop()
+
 frames_to_process = total_frames if max_frames == 0 else min(max_frames, total_frames)
 
 col1, col2, col3 = st.columns(3)
