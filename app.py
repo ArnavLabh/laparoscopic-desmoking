@@ -233,7 +233,10 @@ with tab1:
         help="For larger files use the URL tab"
     )
     if uploaded is not None:
-        tfile_path = tfile_path
+        tfile = tempfile.NamedTemporaryFile(delete=False, suffix=".mp4")
+        tfile.write(uploaded.read())
+        tfile.flush()
+        tfile_path = tfile.name
 
 with tab2:
     st.markdown("""
@@ -268,11 +271,6 @@ if tfile_path is None:
 
 
 # Save uploaded file to temp
-
-
-tfile = tempfile.NamedTemporaryFile(delete=False, suffix=".mp4")
-tfile.write(uploaded.read())
-tfile.flush()
 
 cap = cv2.VideoCapture(tfile_path)
 total_frames = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
