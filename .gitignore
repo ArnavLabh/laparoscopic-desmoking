@@ -1,0 +1,5 @@
+weights/*.pth
+__pycache__/
+*.pyc
+.env
+data/
