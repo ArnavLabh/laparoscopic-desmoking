@@ -356,8 +356,9 @@ with frame_cols[0]:
     orig_display = st.empty()
 
 with frame_cols[1]:
-    st.markdown("### ENHANCED")
-    enh_display = st.empty()
+    st.markdown("### OUTPUT")
+    output_label = st.empty()
+    enh_display  = st.empty()
 
 st.markdown("---")
 st.markdown("### LIVE METRICS")
@@ -430,6 +431,23 @@ for idx in range(start_frame, end_frame):
     enh_rgb  = cv2.cvtColor(enhanced, cv2.COLOR_BGR2RGB)
     orig_display.image(orig_rgb, use_container_width=True)
     enh_display.image(enh_rgb,  use_container_width=True)
+
+    if is_smoky:
+        output_label.markdown(
+            '<div style="font-family:monospace; font-size:0.75rem; '
+            'background:#1a2e1a; border:1px solid #2d7a2d; border-radius:4px; '
+            'padding:4px 10px; color:#69db69; display:inline-block">'
+            '✦ SMOKE REMOVED</div>',
+            unsafe_allow_html=True
+        )
+    else:
+        output_label.markdown(
+            '<div style="font-family:monospace; font-size:0.75rem; '
+            'background:#1a1a2e; border:1px solid #2d2d7a; border-radius:4px; '
+            'padding:4px 10px; color:#6b6bff; display:inline-block">'
+            '→ PASSING UNTOUCHED</div>',
+            unsafe_allow_html=True
+        )
 
     # Metrics display
     m_frame.metric("FRAME", f"{idx+1}/{frames_to_process}")
