@@ -417,7 +417,7 @@ for idx in range(start_frame, end_frame):
     })
 
     # Update UI every frame
-    progress_bar.progress((idx + 1) / frames_to_process)
+    progress_bar.progress((idx - start_frame + 1) / frames_to_process)
     status_text.markdown(
         f'<div style="font-family:monospace; font-size:0.8rem; color:#5a8a9f">'
         f'PROCESSING FRAME {idx+1}/{frames_to_process} &nbsp;|&nbsp; '
