@@ -1,4 +1,0 @@
-{
-    "snyk.advanced.autoSelectOrganization": true,
-    "python-envs.defaultEnvManager": "ms-python.python:system"
-}
