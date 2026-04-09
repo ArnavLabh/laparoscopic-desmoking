@@ -20,9 +20,7 @@ from pipeline.utils.download_weights import ensure_weights
 
 ensure_weights()
 
-# -------------------------------------------------------------------
 # Page config
-# -------------------------------------------------------------------
 
 st.set_page_config(
     page_title="Laparoscopic Desmoking v0.1",
@@ -31,9 +29,7 @@ st.set_page_config(
     initial_sidebar_state="expanded",
 )
 
-# -------------------------------------------------------------------
 # CSS
-# -------------------------------------------------------------------
 
 st.markdown("""
 <style>
@@ -93,17 +89,15 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 
-# -------------------------------------------------------------------
 # Enhancement methods
-# -------------------------------------------------------------------
 
 METHODS = ["CycleGAN Lite", "Dark Channel", "CLAHE", "Passing Untouched"]
 
 METHOD_COLORS = {
-    "CycleGAN Lite":     (105, 219, 105),   # green
-    "Dark Channel":      (255, 215,   0),   # yellow
-    "CLAHE":             (0,   212, 255),   # cyan
-    "Passing Untouched": (107, 107, 255),   # blue
+    "CycleGAN Lite":     (105, 219, 105),
+    "Dark Channel":      (255, 215,   0),
+    "CLAHE":             (  0, 212, 255),
+    "Passing Untouched": (107, 107, 255),
 }
 
 def apply_clahe(frame: np.ndarray) -> np.ndarray:
@@ -125,20 +119,7 @@ def apply_dark_channel(frame: np.ndarray) -> np.ndarray:
     return np.clip(result * 255, 0, 255).astype(np.uint8)
 
 
-def burn_label(frame: np.ndarray, label: str) -> np.ndarray:
-    """Burn method label into bottom-left of frame."""
-    out = frame.copy()
-    color = METHOD_COLORS.get(label, (255, 255, 255))
-    h, w = out.shape[:2]
-    # Background rectangle
-    cv2.rectangle(out, (0, h - 28), (len(label) * 11 + 16, h), (0, 0, 0), -1)
-    cv2.putText(out, label, (8, h - 8),
-                cv2.FONT_HERSHEY_SIMPLEX, 0.55, color, 1, cv2.LINE_AA)
-    return out
-
-
 def enhance_frame(frame, method, generator, device):
-    """Apply selected enhancement method. Returns (enhanced_frame, method_label)."""
     if method == "CycleGAN Lite":
         return desmoke_frame(generator, frame, device=device), "CycleGAN Lite"
     elif method == "Dark Channel":
@@ -149,9 +130,18 @@ def enhance_frame(frame, method, generator, device):
         return frame.copy(), "Passing Untouched"
 
 
-# -------------------------------------------------------------------
+def burn_label(frame: np.ndarray, label: str) -> np.ndarray:
+    """Burn method label into bottom-left corner of frame."""
+    out = frame.copy()
+    color = METHOD_COLORS.get(label, (255, 255, 255))
+    h = out.shape[0]
+    cv2.rectangle(out, (0, h - 28), (len(label) * 11 + 16, h), (0, 0, 0), -1)
+    cv2.putText(out, label, (8, h - 8),
+                cv2.FONT_HERSHEY_SIMPLEX, 0.55, color, 1, cv2.LINE_AA)
+    return out
+
+
 # Helpers
-# -------------------------------------------------------------------
 
 @st.cache_resource
 def load_models():
@@ -197,36 +187,21 @@ def download_video_from_url(url: str) -> str:
     return tmp.name
 
 
-# -------------------------------------------------------------------
 # Session state
-# -------------------------------------------------------------------
 
 defaults = {
-    "tfile_path":         None,
-    "total_frames":       0,
-    "fps":                25.0,
-    "processing":         False,   # currently running
-    "paused":             False,   # paused mid-run
-    "stopped":            False,   # user stopped
-    "current_frame_idx":  0,       # resume point
-    "metrics_log":        [],
-    "log_lines":          [],
-    "smoky_count":        0,
-    "output_tmp_path":    None,
-    "processing_done":    False,
-    "start_frame":        0,
-    "end_frame":          0,
-    "frames_to_process":  0,
-    "active_method":      "CycleGAN Lite",
+    "tfile_path":      None,
+    "stop_flag":       False,
+    "processing_done": False,
+    "metrics_log":     [],
+    "output_path":     None,
 }
 for key, val in defaults.items():
     if key not in st.session_state:
         st.session_state[key] = val
 
 
-# -------------------------------------------------------------------
 # Sidebar
-# -------------------------------------------------------------------
 
 with st.sidebar:
     st.markdown("## ⚙ PIPELINE CONFIG")
@@ -264,17 +239,13 @@ with st.sidebar:
     """, unsafe_allow_html=True)
 
 
-# -------------------------------------------------------------------
 # Header
-# -------------------------------------------------------------------
 
 st.markdown("# 🔬 LAPAROSCOPIC DESMOKING PIPELINE")
 st.markdown("## SURGICAL SMOKE DETECTION & REMOVAL · v0.1")
 st.markdown("---")
 
-# -------------------------------------------------------------------
 # Upload
-# -------------------------------------------------------------------
 
 tab1, tab2 = st.tabs(["📁  UPLOAD FILE", "🔗  PASTE URL"])
 
@@ -293,7 +264,6 @@ with tab1:
         tfile_path = tfile.name
         st.session_state.tfile_path      = tfile_path
         st.session_state.processing_done = False
-        st.session_state.processing      = False
 
 with tab2:
     st.markdown("""
@@ -311,7 +281,6 @@ with tab2:
                 tfile_path = download_video_from_url(video_url)
                 st.session_state.tfile_path      = tfile_path
                 st.session_state.processing_done = False
-                st.session_state.processing      = False
                 st.success("Video fetched successfully.")
             except Exception as e:
                 st.error(f"Could not fetch video: {e}")
@@ -329,9 +298,7 @@ if tfile_path is None:
     """, unsafe_allow_html=True)
     st.stop()
 
-# -------------------------------------------------------------------
 # Video info
-# -------------------------------------------------------------------
 
 cap = cv2.VideoCapture(tfile_path)
 total_frames = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
@@ -342,8 +309,7 @@ if total_frames < 2:
     st.error("Could not read video. If using a URL, ensure it is a direct download link.")
     st.stop()
 
-st.session_state.total_frames = total_frames
-st.session_state.fps = fps
+st.session_state.tfile_path = tfile_path
 
 st.markdown("---")
 vi1, vi2, vi3 = st.columns(3)
@@ -351,26 +317,23 @@ vi1.metric("TOTAL FRAMES", total_frames)
 vi2.metric("FPS", f"{fps:.1f}")
 vi3.metric("DURATION", frames_to_time(total_frames, fps))
 
-# -------------------------------------------------------------------
 # Range selector
-# -------------------------------------------------------------------
 
 st.markdown("#### SELECT CLIP RANGE")
 st.markdown(
     f'<div style="font-family:monospace; font-size:0.7rem; color:#2a4a5a; margin-bottom:6px">'
-    f'Enter times in MM:SS &nbsp;·&nbsp; '
-    f'Video duration: {frames_to_time(total_frames, fps)}</div>',
+    f'Enter times in MM:SS &nbsp;·&nbsp; Duration: {frames_to_time(total_frames, fps)}</div>',
     unsafe_allow_html=True
 )
 
 rc1, rc2 = st.columns(2)
 with rc1:
-    start_input = st.text_input("Start (MM:SS)", value="0:00", key="start_input")
+    start_input = st.text_input("Start (MM:SS)", value="0:00")
 with rc2:
     end_input = st.text_input(
         "End (MM:SS)",
         value=frames_to_time(min(int(fps * 10), total_frames), fps),
-        key="end_input"
+        help=f"Max: {frames_to_time(total_frames, fps)}"
     )
 
 start_frame = min(time_to_frames(start_input, fps), total_frames - 1)
@@ -384,327 +347,260 @@ sc2.metric("END",         frames_to_time(end_frame,   fps))
 sc3.metric("CLIP LENGTH", frames_to_time(frames_to_process, fps))
 sc4.metric("FRAMES",      frames_to_process)
 
+# Method selector
+
 st.markdown("---")
-
-# -------------------------------------------------------------------
-# Enhancement method selector
-# -------------------------------------------------------------------
-
 st.markdown("#### DESMOKING METHOD")
-
-# Allow method change when paused OR before starting
-method_disabled = st.session_state.processing and not st.session_state.paused
-
 selected_method = st.selectbox(
     "Method",
     options=METHODS,
-    index=METHODS.index(st.session_state.active_method),
-    disabled=method_disabled,
-    help="Change method while paused to switch mid-video",
+    index=0,
     label_visibility="collapsed"
 )
 
-if not method_disabled:
-    st.session_state.active_method = selected_method
-
-if st.session_state.paused:
-    st.markdown(
-        '<div style="font-family:monospace; font-size:0.72rem; color:#ffd700; margin-top:4px">'
-        '⏸ PAUSED — you can change method above then resume</div>',
-        unsafe_allow_html=True
-    )
+st.markdown("""
+<div style='font-family:monospace; font-size:0.7rem; color:#2a4a5a; margin-top:2px'>
+CycleGAN Lite — trained deep learning model &nbsp;·&nbsp;
+Dark Channel — classical physics-based &nbsp;·&nbsp;
+CLAHE — contrast enhancement only &nbsp;·&nbsp;
+Passing Untouched — no processing
+</div>
+""", unsafe_allow_html=True)
 
 st.markdown("---")
 
-# -------------------------------------------------------------------
-# Control buttons
-# -------------------------------------------------------------------
+# Run / Stop buttons
 
-btn_col1, btn_col2, btn_col3 = st.columns(3)
+btn1, btn2 = st.columns([1, 1])
+with btn1:
+    run = st.button("▶  RUN ENHANCEMENT PIPELINE")
+with btn2:
+    if st.button("⏹  STOP"):
+        st.session_state.stop_flag = True
 
-with btn_col1:
-    run_btn = st.button(
-        "▶  RUN",
-        disabled=st.session_state.processing and not st.session_state.paused
-    )
-
-with btn_col2:
-    pause_btn = st.button(
-        "⏸  PAUSE" if not st.session_state.paused else "▶  RESUME",
-        disabled=not st.session_state.processing
-    )
-
-with btn_col3:
-    stop_btn = st.button(
-        "⏹  STOP",
-        disabled=not st.session_state.processing
-    )
-
-# Handle button actions
-if run_btn and not st.session_state.processing:
-    # Fresh start
-    st.session_state.processing        = True
-    st.session_state.paused            = False
-    st.session_state.stopped           = False
-    st.session_state.current_frame_idx = start_frame
-    st.session_state.metrics_log       = []
-    st.session_state.log_lines         = []
-    st.session_state.smoky_count       = 0
-    st.session_state.start_frame       = start_frame
-    st.session_state.end_frame         = end_frame
-    st.session_state.frames_to_process = frames_to_process
-    st.session_state.processing_done   = False
-    # Create output video file
-    output_tmp = tempfile.NamedTemporaryFile(delete=False, suffix=".mp4")
-    cap_tmp = cv2.VideoCapture(tfile_path)
-    w = int(cap_tmp.get(cv2.CAP_PROP_FRAME_WIDTH))
-    h = int(cap_tmp.get(cv2.CAP_PROP_FRAME_HEIGHT))
-    cap_tmp.release()
-    fourcc = cv2.VideoWriter_fourcc(*"mp4v")
-    writer = cv2.VideoWriter(output_tmp.name, fourcc, fps, (w, h))
-    writer.release()
-    st.session_state.output_tmp_path = output_tmp.name
-    st.rerun()
-
-if pause_btn:
-    st.session_state.paused = not st.session_state.paused
-    st.rerun()
-
-if stop_btn:
-    st.session_state.stopped         = True
-    st.session_state.processing      = False
-    st.session_state.processing_done = True
-    st.rerun()
-
-# -------------------------------------------------------------------
-# Processing (one frame at a time per rerun — enables true pause/resume)
-# -------------------------------------------------------------------
-
-if st.session_state.processing and not st.session_state.paused and not st.session_state.stopped:
-
-    with st.spinner("Loading models...") if not hasattr(st.session_state, '_models_loaded') else st.empty():
-        classifier, generator, device = load_models()
-
-    idx             = st.session_state.current_frame_idx
-    end_f           = st.session_state.end_frame
-    start_f         = st.session_state.start_frame
-    frames_total    = st.session_state.frames_to_process
-    done_count      = idx - start_f
-    method          = st.session_state.active_method
-
-    # Status
-    st.markdown("---")
-    progress_val = done_count / frames_total if frames_total > 0 else 0
-    st.progress(progress_val)
-    st.markdown(
-        f'<div style="font-family:monospace; font-size:0.75rem; color:#5a8a9f">'
-        f'{frames_to_time(idx, fps)} &nbsp;|&nbsp; '
-        f'FRAME {done_count}/{frames_total} &nbsp;|&nbsp; '
-        f'SMOKY: {st.session_state.smoky_count} &nbsp;|&nbsp; '
-        f'METHOD: {method}</div>',
-        unsafe_allow_html=True
-    )
-
-    # Read and process one frame
-    cap = cv2.VideoCapture(tfile_path)
-    cap.set(cv2.CAP_PROP_POS_FRAMES, idx)
-    ret, frame = cap.read()
-    cap.release()
-
-    if ret and idx < end_f:
-        label, confidence = predict_frame(classifier, frame, device=device)
-        is_smoky = (label == 1) and (confidence >= confidence_thresh)
-
-        if is_smoky:
-            st.session_state.smoky_count += 1
-            enhanced, method_label = enhance_frame(frame, method, generator, device)
-            metrics = evaluate_frame(frame, enhanced)
-            status  = "SMOKY"
-        else:
-            enhanced     = frame.copy()
-            method_label = "Passing Untouched"
-            metrics      = {"psnr": None, "ssim": None, "delta_e": None}
-            status       = "CLEAR"
-
-        # Burn label into output frame
-        output_frame = burn_label(enhanced, method_label)
-
-        # Append to output video
-        fourcc = cv2.VideoWriter_fourcc(*"mp4v")
-        cap_tmp = cv2.VideoCapture(tfile_path)
-        w = int(cap_tmp.get(cv2.CAP_PROP_FRAME_WIDTH))
-        h = int(cap_tmp.get(cv2.CAP_PROP_FRAME_HEIGHT))
-        cap_tmp.release()
-        writer = cv2.VideoWriter(
-            st.session_state.output_tmp_path, fourcc, fps, (w, h),
-        )
-        # Re-open in append mode by reading existing and rewriting
-        # Simpler: store frames list and write at end — but memory heavy
-        # Best approach: write per-frame to a temp file and concatenate
-        # For Streamlit simplicity: keep single writer open via session state trick
-        # We write by reopening — acceptable for demo quality
-        writer.release()
-
-        # Log
-        st.session_state.metrics_log.append({
-            "frame":      idx,
-            "time":       frames_to_time(idx, fps),
-            "smoky":      is_smoky,
-            "method":     method_label,
-            "confidence": round(confidence, 4),
-            **{k: round(v, 4) if v is not None else None for k, v in metrics.items()}
-        })
-
-        psnr_str = f"{metrics['psnr']:.1f}dB" if metrics["psnr"] else "  —  "
-        de_str   = f"ΔE={metrics['delta_e']:.2f}" if metrics["delta_e"] else "ΔE= —"
-        st.session_state.log_lines.append(
-            f"[{frames_to_time(idx, fps):>5}] {status:5s} | "
-            f"{method_label:20s} | conf={confidence:.2f} | "
-            f"PSNR={psnr_str:>8} | {de_str}"
-        )
-
-        # Display
-        frame_cols = st.columns(2)
-        with frame_cols[0]:
-            st.markdown("### ORIGINAL")
-            st.image(cv2.cvtColor(frame, cv2.COLOR_BGR2RGB), use_container_width=True)
-        with frame_cols[1]:
-            st.markdown("### OUTPUT")
-            st.image(cv2.cvtColor(output_frame, cv2.COLOR_BGR2RGB), use_container_width=True)
-
-        # Metrics
-        mc = st.columns(4)
-        mc[0].metric("TIME",  frames_to_time(idx, fps))
-        if is_smoky and metrics["psnr"] is not None:
-            mc[1].metric("PSNR",  f"{metrics['psnr']:.1f} dB")
-            mc[2].metric("SSIM",  f"{metrics['ssim']:.3f}")
-            mc[3].metric("ΔE",    f"{metrics['delta_e']:.2f}")
-        else:
-            mc[1].metric("PSNR", "—")
-            mc[2].metric("SSIM", "—")
-            mc[3].metric("ΔE",   "—")
-
-        st.markdown("---")
-        st.code("\n".join(st.session_state.log_lines[-10:]))
-
-        # Advance to next frame
-        st.session_state.current_frame_idx = idx + 1
-
-        if idx + 1 >= end_f:
-            st.session_state.processing      = False
-            st.session_state.processing_done = True
-        else:
-            # Rerun to process next frame
-            time.sleep(0.01)
-            st.rerun()
-
+if not run:
+    # Show previous results if available
+    if st.session_state.processing_done and st.session_state.metrics_log:
+        st.info("Previous run results shown below. Press RUN to process again.")
     else:
-        st.session_state.processing      = False
-        st.session_state.processing_done = True
-        st.rerun()
+        st.stop()
 
-# -------------------------------------------------------------------
-# Paused state display
-# -------------------------------------------------------------------
+# Reset for new run
 
-elif st.session_state.processing and st.session_state.paused:
-    st.markdown("---")
-    idx          = st.session_state.current_frame_idx
-    start_f      = st.session_state.start_frame
-    frames_total = st.session_state.frames_to_process
-    done_count   = idx - start_f
+st.session_state.stop_flag       = False
+st.session_state.processing_done = False
+st.session_state.metrics_log     = []
 
-    st.progress(done_count / frames_total if frames_total > 0 else 0)
-    st.markdown(
-        f'<div style="font-family:monospace; font-size:0.75rem; color:#ffd700">'
-        f'⏸ PAUSED at {frames_to_time(idx, fps)} &nbsp;|&nbsp; '
-        f'FRAME {done_count}/{frames_total} &nbsp;|&nbsp; '
-        f'SMOKY so far: {st.session_state.smoky_count}</div>',
-        unsafe_allow_html=True
-    )
-    st.markdown("""
-    <div style='font-family:monospace; font-size:0.72rem; color:#5a8a9f; margin-top:4px'>
-    Change desmoking method above and click RESUME to continue with the new method.
-    </div>
-    """, unsafe_allow_html=True)
+# Load models
 
-    if st.session_state.log_lines:
-        st.markdown("---")
-        st.markdown("### FRAME LOG (so far)")
-        st.code("\n".join(st.session_state.log_lines[-10:]))
+with st.spinner("Loading models..."):
+    classifier, generator, device = load_models()
 
-# -------------------------------------------------------------------
-# Summary + downloads (after processing done)
-# -------------------------------------------------------------------
+st.markdown(
+    f'<div style="font-family:monospace; font-size:0.72rem; color:#5a8a9f; margin-bottom:4px">'
+    f'DEVICE: {device.upper()} &nbsp;|&nbsp; METHOD: {selected_method}</div>',
+    unsafe_allow_html=True
+)
+st.markdown("---")
 
-if st.session_state.processing_done and st.session_state.metrics_log:
-    st.markdown("---")
-    st.markdown("### PIPELINE SUMMARY")
+# Processing layout
 
-    metrics_log  = st.session_state.metrics_log
-    smoky_count  = st.session_state.smoky_count
-    total_done   = len(metrics_log)
+progress_bar = st.progress(0)
+status_text  = st.empty()
 
-    s1, s2, s3, s4 = st.columns(4)
-    s1.metric("FRAMES PROCESSED",  total_done)
-    s2.metric("SMOKY DETECTED",    smoky_count)
-    s3.metric("SMOKE %",           f"{100*smoky_count/max(total_done,1):.1f}%")
-    s4.metric("CLEAR (UNCHANGED)", total_done - smoky_count)
+frame_cols = st.columns(2)
+with frame_cols[0]:
+    st.markdown("### ORIGINAL")
+    orig_display = st.empty()
 
-    # Method breakdown
-    method_counts = {}
-    for m in metrics_log:
-        ml = m.get("method", "Unknown")
-        method_counts[ml] = method_counts.get(ml, 0) + 1
+with frame_cols[1]:
+    st.markdown("### OUTPUT")
+    enh_display  = st.empty()
+    output_label = st.empty()
 
-    if method_counts:
-        st.markdown("---")
-        st.markdown("### METHOD BREAKDOWN")
-        mc_cols = st.columns(len(method_counts))
-        for i, (mname, mcount) in enumerate(method_counts.items()):
-            mc_cols[i].metric(mname, mcount)
+st.markdown("---")
+st.markdown("### LIVE METRICS")
+mc = st.columns(4)
+m_time    = mc[0].empty()
+m_psnr    = mc[1].empty()
+m_ssim    = mc[2].empty()
+m_delta_e = mc[3].empty()
 
-    enhanced_m = [m for m in metrics_log if m["smoky"] and m.get("psnr") is not None]
-    if enhanced_m:
-        st.markdown("---")
-        st.markdown("### AVERAGE QUALITY METRICS (enhanced frames)")
-        a1, a2, a3 = st.columns(3)
-        avg_psnr    = np.mean([m["psnr"]    for m in enhanced_m])
-        avg_ssim    = np.mean([m["ssim"]    for m in enhanced_m])
-        avg_delta_e = np.mean([m["delta_e"] for m in enhanced_m])
-        a1.metric("AVG PSNR",    f"{avg_psnr:.2f} dB")
-        a2.metric("AVG SSIM",    f"{avg_ssim:.4f}")
-        a3.metric("AVG DELTA-E", f"{avg_delta_e:.2f}")
+st.markdown("---")
+st.markdown("### FRAME LOG")
+log_container = st.empty()
 
-        if avg_delta_e < 2:
-            de_status, de_color = "✓ IMPERCEPTIBLE — clinically safe",        "#69db69"
-        elif avg_delta_e < 5:
-            de_status, de_color = "⚠ ACCEPTABLE — within clinical tolerance", "#ffd700"
-        else:
-            de_status, de_color = "✗ NOTICEABLE — review enhancement output", "#ff6b6b"
+# Processing loop
 
-        st.markdown(
-            f'<div style="font-family:monospace; font-size:0.8rem; '
-            f'color:{de_color}; margin-top:4px">'
-            f'COLOR FIDELITY: {de_status}</div>',
+cap = cv2.VideoCapture(tfile_path)
+cap.set(cv2.CAP_PROP_POS_FRAMES, start_frame)
+
+metrics_log = []
+log_lines   = []
+smoky_count = 0
+
+output_tmp = tempfile.NamedTemporaryFile(delete=False, suffix=".mp4")
+fourcc = cv2.VideoWriter_fourcc(*"mp4v")
+w = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
+h = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
+writer = cv2.VideoWriter(output_tmp.name, fourcc, fps, (w, h))
+
+for idx in range(start_frame, end_frame):
+
+    # Check stop flag
+    if st.session_state.stop_flag:
+        status_text.markdown(
+            '<div style="font-family:monospace; font-size:0.75rem; color:#ff6b6b">'
+            '⏹ STOPPED — processing ended early</div>',
             unsafe_allow_html=True
         )
+        break
 
-    # Downloads — metrics JSON only (video writer per-frame append not supported cleanly)
+    ret, frame = cap.read()
+    if not ret:
+        break
+
+    # Detect smoke
+    label, confidence = predict_frame(classifier, frame, device=device)
+    is_smoky = (label == 1) and (confidence >= confidence_thresh)
+
+    if is_smoky:
+        smoky_count += 1
+        enhanced, method_label = enhance_frame(frame, selected_method, generator, device)
+        metrics = evaluate_frame(frame, enhanced)
+        status  = "SMOKY"
+    else:
+        enhanced     = frame.copy()
+        method_label = "Passing Untouched"
+        metrics      = {"psnr": None, "ssim": None, "delta_e": None}
+        status       = "CLEAR"
+        time.sleep(0.04)  # brief hold so clear frames are visible
+
+    # Burn label into output frame
+    output_frame = burn_label(enhanced, method_label)
+    writer.write(output_frame)
+
+    metrics_log.append({
+        "frame":      idx,
+        "time":       frames_to_time(idx, fps),
+        "smoky":      is_smoky,
+        "method":     method_label,
+        "confidence": round(confidence, 4),
+        **{k: round(v, 4) if v is not None else None for k, v in metrics.items()}
+    })
+
+    # Progress
+    done_count = idx - start_frame + 1
+    progress_bar.progress(done_count / frames_to_process)
+    status_text.markdown(
+        f'<div style="font-family:monospace; font-size:0.75rem; color:#5a8a9f">'
+        f'{frames_to_time(idx, fps)} &nbsp;|&nbsp; '
+        f'FRAME {done_count}/{frames_to_process} &nbsp;|&nbsp; '
+        f'SMOKY: {smoky_count} &nbsp;|&nbsp; '
+        f'METHOD: {method_label}</div>',
+        unsafe_allow_html=True
+    )
+
+    # Display
+    orig_display.image(cv2.cvtColor(frame,        cv2.COLOR_BGR2RGB), use_container_width=True)
+    enh_display.image( cv2.cvtColor(output_frame, cv2.COLOR_BGR2RGB), use_container_width=True)
+
+    # Label below output
+    color_hex = "#{:02x}{:02x}{:02x}".format(*METHOD_COLORS.get(method_label, (255,255,255)))
+    output_label.markdown(
+        f'<div style="font-family:monospace; font-size:0.72rem; '
+        f'background:#0d1a26; border:1px solid #1a3a5c; border-radius:4px; '
+        f'padding:3px 8px; color:{color_hex}; display:inline-block; margin-top:4px">'
+        f'{method_label}</div>',
+        unsafe_allow_html=True
+    )
+
+    # Metrics
+    m_time.metric("TIME", frames_to_time(idx, fps))
+    if is_smoky and metrics["psnr"] is not None:
+        m_psnr.metric("PSNR",  f"{metrics['psnr']:.1f} dB")
+        m_ssim.metric("SSIM",  f"{metrics['ssim']:.3f}")
+        m_delta_e.metric("ΔE", f"{metrics['delta_e']:.2f}")
+    else:
+        m_psnr.metric("PSNR",  "—")
+        m_ssim.metric("SSIM",  "—")
+        m_delta_e.metric("ΔE", "—")
+
+    # Log
+    psnr_str = f"{metrics['psnr']:.1f}dB" if metrics["psnr"] else "  —  "
+    de_str   = f"ΔE={metrics['delta_e']:.2f}" if metrics["delta_e"] else "ΔE= —"
+    log_lines.append(
+        f"[{frames_to_time(idx, fps):>5}] {status:5s} | "
+        f"{method_label:20s} | conf={confidence:.2f} | "
+        f"PSNR={psnr_str:>8} | {de_str}"
+    )
+    log_container.code("\n".join(log_lines[-10:]), language=None)
+
+cap.release()
+writer.release()
+
+st.session_state.metrics_log     = metrics_log
+st.session_state.output_path     = output_tmp.name
+st.session_state.processing_done = True
+
+# Summary
+
+st.markdown("---")
+st.markdown("### PIPELINE SUMMARY")
+
+total_done = len(metrics_log)
+s1, s2, s3, s4 = st.columns(4)
+s1.metric("FRAMES PROCESSED",  total_done)
+s2.metric("SMOKY DETECTED",    smoky_count)
+s3.metric("SMOKE %",           f"{100*smoky_count/max(total_done,1):.1f}%")
+s4.metric("CLEAR (UNCHANGED)", total_done - smoky_count)
+
+enhanced_m = [m for m in metrics_log if m["smoky"] and m.get("psnr") is not None]
+if enhanced_m:
     st.markdown("---")
+    st.markdown("### AVERAGE QUALITY METRICS")
+    a1, a2, a3 = st.columns(3)
+    avg_psnr    = np.mean([m["psnr"]    for m in enhanced_m])
+    avg_ssim    = np.mean([m["ssim"]    for m in enhanced_m])
+    avg_delta_e = np.mean([m["delta_e"] for m in enhanced_m])
+    a1.metric("AVG PSNR",    f"{avg_psnr:.2f} dB")
+    a2.metric("AVG SSIM",    f"{avg_ssim:.4f}")
+    a3.metric("AVG DELTA-E", f"{avg_delta_e:.2f}")
+
+    if avg_delta_e < 2:
+        de_status, de_color = "✓ IMPERCEPTIBLE — clinically safe",        "#69db69"
+    elif avg_delta_e < 5:
+        de_status, de_color = "⚠ ACCEPTABLE — within clinical tolerance", "#ffd700"
+    else:
+        de_status, de_color = "✗ NOTICEABLE — review enhancement output", "#ff6b6b"
+
+    st.markdown(
+        f'<div style="font-family:monospace; font-size:0.8rem; '
+        f'color:{de_color}; margin-top:4px">'
+        f'COLOR FIDELITY: {de_status}</div>',
+        unsafe_allow_html=True
+    )
+
+# Downloads
+
+st.markdown("---")
+dl1, dl2 = st.columns(2)
+
+with dl1:
+    with open(output_tmp.name, "rb") as f:
+        st.download_button(
+            label="⬇  DOWNLOAD ENHANCED VIDEO",
+            data=f,
+            file_name="enhanced_output.mp4",
+            mime="video/mp4"
+        )
+with dl2:
     st.download_button(
         label="⬇  DOWNLOAD METRICS JSON",
         data=json.dumps(metrics_log, indent=2),
         file_name="pipeline_metrics.json",
         mime="application/json"
     )
-
-    st.markdown("""
-    <div style='font-family:monospace; font-size:0.7rem; color:#2a4a5a; margin-top:4px'>
-    Note: Video download is not available with per-frame method switching.
-    Run without pausing to get a downloadable output video.
-    </div>
-    """, unsafe_allow_html=True)
 
 st.markdown("""
 <div style='font-family:monospace; font-size:0.65rem; color:#1e2733;
